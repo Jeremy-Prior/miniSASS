@@ -65,6 +65,9 @@ class ObservationPestImageSerializer(serializers.ModelSerializer):
     pest_id = serializers.SerializerMethodField()
     pest_name = serializers.SerializerMethodField()
 
+    ml_score = serializers.FloatField()
+    ml_prediction = serializers.CharField()
+
     def get_pest_id(self, instance):
         if instance.group:
             return instance.group_id
@@ -139,7 +142,8 @@ class ObservationsSerializer(serializers.ModelSerializer):
     comment = serializers.CharField(allow_blank=True, default='')
 
     def create(self, validated_data):
-        # Ensure that the 'comment' key is present in the validated_data
+        if 'comment' not in validated_data:
+            validated_data['comment'] = ''
         return super().create(validated_data)
      
 

@@ -16,8 +16,9 @@ export interface DegreeInputInterface {
 /** Degree input form. **/
 function DegreeInput({ label, value, onChange, disabled }: DegreeInputInterface) {
   const [currValue, setCurrValue] = useState(value)
-  const min = label === 'Latitude' ? -90 : -180
-  const max = -1 * min
+  const min = label === 'Latitude' ? -90.000000 : -180.000000;
+  const max = -1 * min;
+
 
   const convertToSixDecimals = React.useMemo(
     () =>
@@ -38,10 +39,11 @@ function DegreeInput({ label, value, onChange, disabled }: DegreeInputInterface)
       onChange(currValue)
     }
   }, [currValue]);
-
+  
   useEffect(() => {
-    if (value) {
-      convertToSixDecimals(value)
+    if (!isNaN(value) && disabled) {
+      onChange(value)
+      setCurrValue(value)
     }
   }, [value]);
 
@@ -58,6 +60,10 @@ function DegreeInput({ label, value, onChange, disabled }: DegreeInputInterface)
       id={label}
       value={currValue}
       type="number"
+      onBlur={(evt) => {
+        convertToSixDecimals(evt.target.value)
+        globalVariables.checkIsLand = true
+      }}
       disabled={disabled}
       className="!placeholder:text-black-900_99 !text-black-900_99 font-raleway md:h-auto p-0 sm:h-auto text-base text-left tracking-[0.50px] w-full"
       wrapClassName="sm:w-full"
@@ -68,7 +74,7 @@ function DegreeInput({ label, value, onChange, disabled }: DegreeInputInterface)
       min={min}
       max={max}
       placeholder="0.000000"
-      step={0.0001}
+      step="any"
       style={{
         width: '300px',
         maxWidth: '300px',
@@ -79,6 +85,7 @@ function DegreeInput({ label, value, onChange, disabled }: DegreeInputInterface)
         marginRight: '-2%'
       }}
       onChange={(evt) => {
+        console.log('on change in field')
         let value = evt.target.value
         if (!isNaN(parseFloat(evt.target.value))) {
           if (value > max) {
@@ -137,8 +144,12 @@ export default function DegreeInputs(
   );
 
   useEffect(() => {
-    checkSiteIsLand(latitude, longitude)
-  }, [latitude, longitude]);
+    // console.log('variable state ',globalVariables.checkIsLand)
+    if(globalVariables.checkIsLand){
+      checkSiteIsLand(latitude, longitude)
+      globalVariables.checkIsLand = false
+    }
+  }, [latitude, longitude,globalVariables.checkIsLand]);
 
   return <>
     <DegreeInput

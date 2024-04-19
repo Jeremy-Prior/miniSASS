@@ -4,6 +4,7 @@ import { Button, Img, List, Text } from "../../components";
 import Modal from 'react-modal';
 import { globalVariables } from "../../utils";
 import axios from "axios";
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface ManageImageProps {
   title: string;
@@ -12,8 +13,6 @@ interface ManageImageProps {
   onClose: () => void;
   onSubmit: any;
   sensivityScore: string;
-  aiScore: number;
-  aiGroup: string;
   handleButtonClick: (id: any) => void;
   refetchImages: boolean;
 }
@@ -32,10 +31,10 @@ const ManageImagesModal: React.FC<ManageImageProps> = ({
 
 
   const [imageUrls, setImages] = useState([])
-  const [isGroupMatching, setIsGroupMatching] = useState(false)
-  const [isScoreBelow50, setIsBelow50] = useState(0)
+  const [isFetchingImages, setIsFetchingImages] = useState(false)
 
   const fetch_observation_images = async () => {
+    setIsFetchingImages(true)
     const observationId = parseInt(localStorage.getItem('observationId'))
     const GET_OBSERVATION = globalVariables.baseUrl + `/monitor/observations/observation-details/${observationId}/`
 
@@ -47,19 +46,8 @@ const ManageImagesModal: React.FC<ManageImageProps> = ({
 
         return image.pest_name.toLowerCase().replace(/\s+/g, '_') === formattedTitle;
       });
-
-      filteredImages.forEach((image) => {
-        if(image.pest_name.toLowerCase().replace(/\s+/g, '_') !== aiGroup.toLowerCase().replace(/\s+/g, '_')){
-          if(aiGroup.toLowerCase().replace(/\s+/g, '_') !== 'snails_clams_mussels')
-            setIsGroupMatching(false)
-          else setIsGroupMatching(true)
-        }else {
-          setIsGroupMatching(true)
-        }
-      });
-
       setImages(filteredImages);
-      setIsBelow50(aiScore)
+      setIsFetchingImages(false)
     }
 
   }
@@ -125,21 +113,51 @@ const ManageImagesModal: React.FC<ManageImageProps> = ({
               orientation="horizontal"
             >
 
-            {imageUrls.filter(image => image.pest_name === title).map((image, index) => (
-                <div key={`${image.pest_id}`} className={`relative flex flex-1 flex-col h-28 items-center justify-start sm:ml-[0] w-full ${!isGroupMatching ? 'border-2 border-red-500' : ''} ${isGroupMatching && isScoreBelow50 < 50 ? 'border-2 border-red-500' : ''}`}>
-                    <Img
-                        className="h-28 md:h-auto object-cover w-28"
-                        key={`${image.pest_id}`}
-                        src={image.image}
-                        alt={`${image.pest_name}`}
-                        loading='lazy'
-                    />
-                    {/* Add the x icon here (adjust styles as needed) */}
-                    <div className="absolute top-0 right-0 m-2 cursor-pointer" onClick={() => handleRemoveImage(image.id)}>
-                        ✖
-                    </div>
+            {isFetchingImages ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginLeft:'10px', marginTop: '5px' }}>
+                    <CircularProgress style={{ color: '#288b31' }} />
                 </div>
-              ))}
+            ) : (
+                imageUrls
+                    .filter(image => image.pest_name === title)
+                    .map((image, index) => {
+                        const mlPrediction = image.ml_prediction;
+                        const mlScore = image.ml_score;
+                        var isMlPredictionMatching = false;
+                        if(image.ml_prediction === image.pest_name.toLowerCase().replace(/\s+/g, '_'))
+                          isMlPredictionMatching = true
+                        else if(mlPrediction.includes('crabs') && image.pest_name.toLowerCase().replace(/\s+/g, '_').includes('crabs'))
+                          isMlPredictionMatching = true
+                        else if(mlPrediction.includes('snails') && image.pest_name.toLowerCase().replace(/\s+/g, '_').includes('snails'))
+                          isMlPredictionMatching = true
+                        else if(mlPrediction.includes('bugs') && image.pest_name.toLowerCase().replace(/\s+/g, '_').includes('bugs'))
+                          isMlPredictionMatching = true
+
+                        const isScoreBelow50 = mlScore < 50;
+
+                        return (
+                            <div 
+                                key={`${image.pest_id}`} 
+                                className={`relative flex flex-1 flex-col h-28 items-center justify-start sm:ml-[0] w-full 
+                                    ${(isMlPredictionMatching && !isScoreBelow50) ? '' : 'border-2 border-red-500'}
+                                `}
+                            >
+                                <Img
+                                    className="h-28 md:h-auto object-cover w-28"
+                                    key={`${image.pest_id}`}
+                                    src={image.image}
+                                    alt={`${image.pest_name}`}
+                                    loading='lazy'
+                                />
+                                {/* Add the x icon here (adjust styles as needed) */}
+                                <div className="absolute top-0 right-0 m-2 cursor-pointer" onClick={() => handleRemoveImage(image.id)}>
+                                    ✖
+                                </div>
+                            </div>
+                        );
+                    })
+            )}
+
 
 
               {/* Upload image section */}
@@ -175,18 +193,18 @@ const ManageImagesModal: React.FC<ManageImageProps> = ({
             </div>
             <div className="flex flex-row gap-[17px] items-start justify-start w-full">
               <Text
-                className="flex-1 text-base text-blue-900 tracking-[0.15px] w-auto"
-                size="txtRalewayRomanRegular16"
+                  className="flex-1 text-base text-blue-900 tracking-[0.15px] w-auto"
+                  size="txtRalewayRomanRegular16"
               >
-                ML Prediction:
+                  ML Prediction:
               </Text>
               <Text
-                className="text-base text-black-900 tracking-[0.15px] w-auto"
-                size="txtRalewayRomanRegular16Black900"
+                  className="text-base text-black-900 tracking-[0.15px] w-auto"
+                  size="txtRalewayRomanRegular16Black900"
               >
-                {aiGroup}
+                  {imageUrls.length > 0 ? imageUrls[0].ml_prediction : 'no prediction available'}
               </Text>
-            </div>
+          </div>
           </div>
           <div className="bg-gray-100 flex flex-col items-start justify-start px-4 py-1.5 rounded">
             <div className="flex flex-col items-start justify-start py-2 w-full">

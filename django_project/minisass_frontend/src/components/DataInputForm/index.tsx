@@ -52,6 +52,7 @@ type DataInputFormProps = Omit<
   | "siteDetails"
   | "resetSiteDetails"
   | "useSelectOnSite"
+  | "setIsDisableNavigations"
 > &
   Partial<{
     datainputform: string;
@@ -87,7 +88,8 @@ type DataInputFormProps = Omit<
     siteDetails: {};
     resetSiteDetails: (details: {}) => void;
     useSelectOnSite: (isSelectOnSite: boolean) => void;
-    setCursor: (cursor: string) => void
+    setCursor: (cursor: string) => void;
+    setIsDisableNavigations: React.Dispatch<React.SetStateAction<boolean>>;
   }>;
 
 const inputOptionsList = [
@@ -425,23 +427,27 @@ const DataInputForm: React.FC<DataInputFormProps> = (props) => {
 
 
   const handleCloseSidebar = () => {
+    props.setIsDisableNavigations(false)
     if(formValues.riverName || formValues.siteName || formValues.siteDescription || formValues.date || proceedToSavingData){
       setIsCloseDialogOpen(true)
     }
     else {
       props.setSidebarOpen(false);
       props.resetMap();
-      props.setCursor('')
+      props.setCursor('');
+      setProceedToSavingData(false)
     }
   };
 
   const handleCloseConfirm = () => {
     setIsCloseDialogOpen(false)
     props.setSidebarOpen(false)
+    props.setIsDisableNavigations(false);
   };
 
   const handleDialogCancel = () => {
     setIsCloseDialogOpen(false)
+    setIsDisableNavigations(true)
   };
 
 
@@ -1378,7 +1384,14 @@ const DataInputForm: React.FC<DataInputFormProps> = (props) => {
         </div>
       </div>
       ): (
-        <ScoreForm onCancel={handleHideScoreForm} additionalData={formValues} setSidebarOpen={props.setSidebarOpen} />
+        <ScoreForm 
+          onCancel={handleHideScoreForm} 
+          additionalData={formValues} 
+          setSidebarOpen={props.setSidebarOpen} 
+          proceedToSavingData={proceedToSavingData} 
+          setProceedToSavingData={setProceedToSavingData} 
+          setIsDisableNavigations={props.setIsDisableNavigations} 
+        />
       )}
     </>
   );

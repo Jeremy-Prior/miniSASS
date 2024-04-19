@@ -1,4 +1,6 @@
 import json
+import multiprocessing
+from queue import Queue
 import os
 from datetime import datetime
 from decimal import Decimal
@@ -37,6 +39,7 @@ from rest_framework import status
 from minisass.models import GroupScores
 from minisass.utils import get_s3_client
 from minisass_authentication.models import UserProfile
+from minisass_authentication.permissions import IsAuthenticatedOrWhitelisted
 from monitor.models import (
 	Observations, Sites, SiteImage, ObservationPestImage
 )
@@ -45,6 +48,7 @@ from monitor.serializers import (
 	ObservationPestImageSerializer,
 	ObservationsAllFieldsSerializer
 )
+
 
 def clear_tensorflow_session():
 	tf.keras.backend.clear_session()
@@ -97,18 +101,21 @@ def retrieve_file_from_minio(file_name):
 		)
 
 		# Download the file from Minio
-		file_path = os.path.join(settings.MINIO_ROOT, settings.MINIO_BUCKET, file_name)
+		file_path = os.path.join(
+			settings.MINIO_ROOT, settings.MINIO_BUCKET, file_name)
 		minio_client.fget_object(minio_bucket, file_name, file_path)
 
 		return file_path
 	except (S3Error, TypeError, ValueError):
-		file_path = os.path.join(settings.MINIO_ROOT, settings.MINIO_BUCKET, file_name)
+		file_path = os.path.join(
+			settings.MINIO_ROOT, settings.MINIO_BUCKET, file_name)
 		if os.path.exists(file_path):
 			return file_path
 		else:
 			s3_client = get_s3_client()
 			try:
-				s3_client.download_file(settings.MINIO_AI_BUCKET, file_name, file_path)
+				s3_client.download_file(
+					settings.MINIO_AI_BUCKET, file_name, file_path)
 				return file_path
 			except botocore.exceptions.ClientError as e:
 				print(f"Error retrieving file from Minio: {e}")
@@ -127,6 +134,8 @@ else:
 
 # section for ai score calculations
 # TODO move this into seperate file
+
+
 def classify_image(image):
 	if not model:
 		return {'error': 'Cannot load model'}
@@ -163,8 +172,142 @@ def convert_to_int(value, default=0):
 		except (ValueError, TypeError):
 			return default
 
+
+# def process_image_classification(image, observation, classification_results):
+# 	try:
+# 		result = classify_image(image)
+# 		classification_results.put(result)
+# 	except (OSError, Image.DecompressionBombError, Image.UnidentifiedImageError) as e:
+# 		return {'status': 'error', 'message': f'Error recognizing image: {str(e)}'}
+
+
+# @csrf_exempt
+# @login_required
+# def upload_pest_image(request):
+# 	"""
+# 	This view function handles the upload of pest images, associating them with an observation and a site.
+
+# 	- Creates an empty site and observation.
+# 	- Associates uploaded images with the observation.
+# 	- Returns the observation ID, site ID, and image IDs for further processing.
+
+# 	Note:
+# 	- The function saves user uploads before saving the observation to facilitate AI calculations on the images.
+# 	- The returned image IDs can be used for image deletion if the user decides to change their selection.
+
+# 	Expected Data:
+# 	- 'datainput' object: Contains additional information about the observation.
+# 	- 'observationID': Specifies the ID for the observation.
+# 	- Uploaded files: Images to be associated with the observation.
+
+# 	:param request: The HTTP request object.
+# 	:return: JsonResponse with status, observation ID, site ID, and pest image IDs.
+# 	"""
+# 	if request.method == 'POST':
+# 		try:
+# 			with transaction.atomic():
+
+# 				site_id = request.POST.get('siteId')
+# 				observation_id = request.POST.get('observationId')
+# 				user = request.user
+# 				site_id = convert_to_int(site_id)
+# 				observation_id = convert_to_int(observation_id)
+
+# 				try:
+# 					site = Sites.objects.get(gid=site_id)
+# 				except Sites.DoesNotExist:
+# 					max_site_id = Sites.objects.all().aggregate(Max('gid'))[
+# 						'gid__max']
+# 					new_site_id = max_site_id + 1 if max_site_id is not None else 1
+
+# 					site_name = request.POST.get('siteName', '')
+# 					river_name = request.POST.get('riverName', '')
+# 					description = request.POST.get('siteDescription', '')
+# 					river_cat = request.POST.get('rivercategory', 'rocky')
+# 					latitude = request.POST.get('latitude', 0)
+# 					longitude = request.POST.get('longitude', 0)
+
+# 					site = Sites(
+# 						gid=new_site_id,
+# 						the_geom=Point(x=float(longitude), y=float(latitude), srid=4326),
+# 						user=user
+# 					)
+
+# 					site.site_name = site_name
+# 					site.river_name = river_name
+# 					site.description = description
+# 					site.river_cat = river_cat
+# 					site.user = user
+# 					site.save()
+
+# 				try:
+# 					observation = Observations.objects.get(
+# 						gid=observation_id, site=site)
+# 				except Observations.DoesNotExist:
+# 					max_observation_id = Observations.objects.all().aggregate(Max('gid'))[
+# 						'gid__max']
+# 					new_observation_id = max_observation_id + \
+# 						1 if max_observation_id is not None else 1
+
+# 					observation = Observations.objects.create(
+# 						gid=new_observation_id,
+# 						site=site,
+# 						user=user,
+# 						comment='',
+# 						obs_date=datetime.now()
+# 					)
+
+# 				# Save images in the request object
+# 				processes = []
+# 				classification_results = Queue()
+# 				for key, image in request.FILES.items():
+# 					if 'pest_' in key:
+# 						group_id = key.split(':')[1]
+# 						if group_id:
+# 							group = GroupScores.objects.get(id=group_id)
+# 							pest_image = ObservationPestImage.objects.create(
+# 								observation=observation,
+# 								group=group
+# 							)
+# 							try:
+# 								pest_image.image = image
+# 								pest_image.save()
+
+# 								p = multiprocessing.Process(
+# 						                    target=process_image_classification, args=(image, observation, classification_results)
+# 						                )
+# 								processes.append(p)
+# 								p.start()
+# 							except (OSError, Image.DecompressionBombError, Image.UnidentifiedImageError) as e:
+# 								# Handle image recognition errors
+# 								classification_results.append({'status': 'error', 'message': f'Error recognizing image: {str(e)}'})
+
+# 				for p in processes:
+# 					p.join()
+
+# 				results_list = []
+# 				while not classification_results.empty():
+# 				    results_list.append(classification_results.get())
+
+
+# 				return JsonResponse(
+# 					{
+# 						'status': 'success',
+# 						'observation_id': observation.gid,
+# 						'site_id': site.gid,
+# 						'pest_image_id': pest_image.id,
+# 						'classification_results': results_list
+# 					}
+# 				)
+# 		except ValidationError as ve:
+# 			return JsonResponse({'status': 'error', 'message': str(ve)})
+# 		except Exception as e:
+# 			# Handle other exceptions
+# 			return JsonResponse({'status': 'error', 'message': str(e)})
+
+# 	return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
+
 @csrf_exempt
-@login_required
 def upload_pest_image(request):
 	"""
 	This view function handles the upload of pest images, associating them with an observation and a site.
@@ -191,9 +334,19 @@ def upload_pest_image(request):
 
 				site_id = request.POST.get('siteId')
 				observation_id = request.POST.get('observationId')
-				user = request.user
 				site_id = convert_to_int(site_id)
 				observation_id = convert_to_int(observation_id)
+
+				if request.user.is_authenticated:
+					# If the user is authenticated, use request.user
+					user = request.user
+				else:
+					# If user_id is provided, get the user
+					user_id = int(request.POST.get('user_id', 0))
+					try:
+						user = User.objects.get(pk=user_id)
+					except User.DoesNotExist:
+						return JsonResponse({'status': 'error', 'message': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
 				try:
 					site = Sites.objects.get(gid=site_id)
@@ -211,7 +364,8 @@ def upload_pest_image(request):
 
 					site = Sites(
 						gid=new_site_id,
-						the_geom=Point(x=float(longitude), y=float(latitude), srid=4326),
+						the_geom=Point(x=float(longitude),
+									   y=float(latitude), srid=4326),
 						user=user
 					)
 
@@ -256,10 +410,16 @@ def upload_pest_image(request):
 
 								# Open the image for classification
 								result = classify_image(image)
+								if 'error' not in result:
+								        # Save classification results to the ObservationPestImage instance
+								        pest_image.ml_prediction = result['class']
+								        pest_image.ml_score = result['confidence']
+								        pest_image.save()
 								classification_results.append(result)
 							except (OSError, Image.DecompressionBombError, Image.UnidentifiedImageError) as e:
 								# Handle image recognition errors
-								classification_results.append({'status': 'error', 'message': f'Error recognizing image: {str(e)}'})
+								classification_results.append(
+									{'status': 'error', 'message': f'Error recognizing image: {str(e)}'})
 
 				return JsonResponse(
 					{
@@ -342,19 +502,19 @@ def create_observations(request):
 			collector_name = datainput.get('collectorsname', '')
 			ml_score = datainput.get('ml_score', 0)
 			obs_date = datainput.get('date')
-			user = request.user
 
-			user_id = datainput.get('user_id', 0)  # Extract user_id from form data
-
-			if not request.user and user_id:
-				# If request.user is empty and user_id is provided, get the user
+			if request.user.is_authenticated:
+				# If the user is authenticated, use request.user
+				user = request.user
+			else:
+				# If user_id is provided, get the user
+				user_id = int(request.POST.get('user_id', 0))
 				try:
 					user = User.objects.get(pk=user_id)
 				except User.DoesNotExist:
-					return Response({'status': 'error', 'message': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+					return JsonResponse({'status': 'error', 'message': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
-
-			site_id_str = str(request.POST.get('siteId','0'))
+			site_id_str = str(request.POST.get('siteId', '0'))
 			selectedSite = 0
 			if site_id_str.lower() == 'undefined':
 				selectedSite = int(datainput.get('selectedSite', 0))
@@ -399,17 +559,21 @@ def create_observations(request):
 					new_site_id = max_site_id + 1 if max_site_id is not None else 1
 
 					if Sites.objects.filter(site_name=site_name).exists():
-						return JsonResponse({'status': 'error', 'message': 'Site name already exists'})
-
-					site = Sites.objects.create(
-						gid=new_site_id,
-						site_name=site_name,
-						river_name=river_name,
-						description=description,
-						river_cat=river_cat,
-						the_geom=Point(x=longitude, y=latitude, srid=4326),
-						user=user
-					)
+						saveToSite = request.POST.get('saveToSite', 'false').lower()
+						if saveToSite == 'true':
+					        	site = Sites.objects.get(site_name=site_name)	
+						else:
+							return JsonResponse({'status': 'error', 'message': 'Site name already exists'})
+					else:
+						site = Sites.objects.create(
+							gid=new_site_id,
+							site_name=site_name,
+							river_name=river_name,
+							description=description,
+							river_cat=river_cat,
+							the_geom=Point(x=longitude, y=latitude, srid=4326),
+							user=user
+						)
 
 				for key, image in request.FILES.items():
 					if 'image_' in key:
@@ -548,10 +712,10 @@ class ObservationRetrieveView(APIView):
 
 
 class ObservationImageViewSet(
-	mixins.RetrieveModelMixin,
-	mixins.DestroyModelMixin,
-	mixins.ListModelMixin,
-	GenericViewSet
+		mixins.RetrieveModelMixin,
+		mixins.DestroyModelMixin,
+		mixins.ListModelMixin,
+		GenericViewSet
 ):
 	"""Return images of observation"""
 	serializer_class = ObservationPestImageSerializer
@@ -570,7 +734,7 @@ class ObservationImageViewSet(
 			Observations, pk=self.kwargs['observation_pk']
 		)
 		if not request.user.is_authenticated or (
-				not request.user.is_staff and request.user != observation.user
+			not request.user.is_staff and request.user != observation.user
 		):
 			raise PermissionDenied()
 		return super().destroy(request, *args, **kwargs)
@@ -579,11 +743,11 @@ class ObservationImageViewSet(
 class ObservationListCreateView(generics.ListCreateAPIView):
 	queryset = Observations.objects.all()
 	serializer_class = ObservationsSerializer
-	permission_classes = [IsAuthenticated]
+	permission_classes = [IsAuthenticatedOrWhitelisted]
 
 
 class ObservationRetrieveUpdateDeleteView(
-	generics.RetrieveUpdateDestroyAPIView
+		generics.RetrieveUpdateDestroyAPIView
 ):
 	queryset = Observations.objects.all()
 	serializer_class = ObservationsSerializer

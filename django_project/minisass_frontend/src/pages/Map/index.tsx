@@ -29,6 +29,7 @@ const MapPage: React.FC = () => {
   const details = params.get("details");
   const open_add_record = params.get("open_add_record");
   const [idxActive, setIdxActive] = useState(open_add_record ? 1 : 0);
+  const [isDisableNavigations, setIsDisableNavigations] = useState(false);
 
   const handleSidebarToggle = () => {
     setIsObservationDetails(false);
@@ -37,6 +38,7 @@ const MapPage: React.FC = () => {
         if(prev === false){
           setIdxActive(1)
         }
+        setIsDisableNavigations(!prev);
         return !prev;
       });
     } else {
@@ -156,7 +158,9 @@ const MapPage: React.FC = () => {
 
                   {/* navigation bar */}
                   <div className="flex md:flex-1 flex-col gap-2 items-center justify-start mb-1.5 w-[100%] md:w-full">
-                    <NavigationBar activePage="map" />
+                    
+                        <NavigationBar activePage="map" isDisableNavigations={isDisableNavigations} />
+                     
                   </div>
                 </div>
               </div>
@@ -225,6 +229,7 @@ const MapPage: React.FC = () => {
                 resetMap={resetMap}
                 setCursor={setCursor}
                 useSelectOnSite={useSelectOnSite}
+                setIsDisableNavigations={setIsDisableNavigations}
               />
             </div>
           </div>

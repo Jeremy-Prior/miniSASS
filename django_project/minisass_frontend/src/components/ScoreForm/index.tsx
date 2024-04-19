@@ -9,17 +9,20 @@ import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import {useAuth} from "../../AuthContext";
 import ConfirmationDialogRaw from "../../components/ConfirmationDialog";
-
+import CircularProgress from '@mui/material/CircularProgress';
 
 
 interface ScoreFormProps {
   onCancel: () => void;
   additionalData: {};
   setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setProceedToSavingData: React.Dispatch<React.SetStateAction<boolean>>;
+  proceedToSavingData: boolean;
+  setIsDisableNavigations: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 
-const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSidebarOpen }) => {
+const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSidebarOpen, setProceedToSavingData, proceedToSavingData, setIsDisableNavigations }) => {
   const [scoreGroups, setScoreGroups] = useState([]);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
@@ -32,8 +35,11 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
   const [openImagePestId, setOpenImagePestId] = useState(0);
   const [pestImages, setPestImages] = useState({});
   const [isSavingData, setIsSavingData] = useState(false);
-  const [selectedPests, setSelectedPests] = useState('')
+  const [selectedPests, setSelectedPests] = useState('');
   const {dispatch, state} = useAuth();
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [allowSaving, setAllowSaving] = useState(false);
+  
 
   const closeSuccessModal = () => {
     setIsSuccessModalOpen(false);
@@ -46,21 +52,25 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
 
   useEffect(() => {
     const fetchScoreGroups = async () => {
-      try {
-        setIsSavingData(true)
-        const response = await axios.get(`${globalVariables.baseUrl}/group-scores/`);
-        if(response.status == 200){
-          setScoreGroups(response.data);
-          setButtonStates(response.data.map(score => ({ id: score.id, showManageImages: false })))
-          setIsSavingData(false)
-        } else; // TODO trigger a retry in about 3 seconds
-      } catch (error) {
-        console.error('Error fetching score groups:', error);
-      }
+        try {
+            setIsSavingData(true);
+            const response = await axios.get(`${globalVariables.baseUrl}/group-scores/`);
+            if (response.status === 200) {
+                setScoreGroups(response.data);
+                setButtonStates(response.data.map(score => ({ id: score.id, showManageImages: false })));
+                setIsSavingData(false);
+            } else {
+                setTimeout(fetchScoreGroups, 5000);
+            }
+        } catch (error) {
+            console.error('Error fetching score groups:', error);
+            setTimeout(fetchScoreGroups, 5000);
+        }
     };
 
     fetchScoreGroups();
-  }, []);
+}, []);
+
 
   const [manageImagesModalData, setManageImagesModalData] = useState({
     groups: '',
@@ -70,20 +80,21 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
   });
 
   const handleButtonClick = (id) => {
-    setIsAddMore(true)
+    setIsAddMore(true);
     setOpenImagePestId(id);
+    setRefetchImages(true); //trigger refetching of images
   };
 
   const [checkboxStates, setCheckboxStates] = useState(
     scoreGroups.reduce((acc, curr) => ({ ...acc, [curr.id]: false }), {})
   );
 
-  const [proceedToSavingData, setProceedToSavingData] = useState(false)
+  // const [proceedToSavingData, setProceedToSavingData] = useState(false)
   const [observationId, setObservationId] = useState(0);
   const [siteId, setSiteId] = useState(0);
 
   // Function to log the state of checkboxes
-  const handleSave = async () => {
+  const handleSave = async (saveToExistingSite  = false) => {
     setIsSavingData(true)
     try {
       
@@ -145,6 +156,9 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
       const site_id = localStorage.getItem('siteId') || siteId;
       form_data.append('observationId', JSON.stringify(obs_id));
       form_data.append('siteId', JSON.stringify(site_id));
+      if(saveToExistingSite === true){
+        form_data.append('saveToSite', JSON.stringify(true));
+      }else form_data.append('saveToSite', JSON.stringify(false));
 
       axios.defaults.headers.common['Authorization'] = `Bearer ${state.user.access_token}`;
       const response = await axios.post(
@@ -164,16 +178,23 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
         localStorage.setItem('observationId', JSON.stringify(0))
         localStorage.setItem('siteId', JSON.stringify(0))
         if (response.data.status.includes('error')) {
-          setErrorMessage(response.data.message);
-          setIsErrorModalOpen(true);
+          if("Site name already exists" === response.data.message){
+            setIsCloseSiteDialogOpen(true);
+          }else {
+            if(response.data.message === "")
+              setErrorMessage("something unexpectedly went wrong, please try again. If the issue should persist ,contact the system administrator via the contact us form describing the problem you're facing.");
+            else setErrorMessage(response.data.message)
+            setIsErrorModalOpen(true);
+          }
         }else {
           setProceedToSavingData(false);
           setIsSuccessModalOpen(true);
+          setIsDisableNavigations(false)
         }
       }
     } catch (exception) {
       setIsSavingData(false)
-      setErrorMessage(error.message);
+      setErrorMessage(exception.message);
       setIsErrorModalOpen(true);
     }
   };
@@ -187,13 +208,17 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
       };
 
       const temp_checkedGroups = scoreGroups.filter((group) => updatedCheckboxStates[group.id]);
+      // Find the newly added group
+      const newlyAddedGroup = scoreGroups.find((group) => group.id === id);
       const temp_totalScore = temp_checkedGroups.reduce((acc, curr) => acc + parseFloat(curr.sensitivity_score), 0);
       const temp_numberOfGroups = temp_checkedGroups.length;
       const temp_averageScore = temp_numberOfGroups !== 0 ? temp_totalScore / temp_numberOfGroups : 0;
 
       setCheckedGroups(temp_checkedGroups)
-      if(temp_checkedGroups.length > 0)
-        setSelectedPests(temp_checkedGroups[temp_checkedGroups.length-1].name)
+      if(temp_checkedGroups.length > 0){
+        setSelectedPests(newlyAddedGroup.name)
+        setAllowSaving(true)
+      }else setAllowSaving(false)
       
       // disabled upload buttons
       const newCheckedState = [...isCheckboxChecked];
@@ -228,6 +253,7 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
     setIsManageImagesModalOpen(true);
     setRefetchImages(true)
     // console.log('assigning ', groups, ' ', sensetivityScore, ' ', ' ', id, ' and and images ',pest_images)
+    
     setManageImagesModalData({
       'groups': groups,
       'sensetivityScore': sensetivityScore,
@@ -244,9 +270,9 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
 
   const [createSiteOrObservation, setCreateNewSiteOrObservation] = useState(true);
   const [refetchImages, setRefetchImages] = useState(false);
-  const [imageAiPrediction, setImageAiPrediction] = useState({});
 
   const uploadImages = async (pestImages) => {
+    setIsUploadingImage(true)
 
     for (const key in pestImages) {
       if (Object.prototype.hasOwnProperty.call(pestImages, key)) {
@@ -299,19 +325,15 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
             );
         
             if(response.status == 200){
+              setIsUploadingImage(false)
               setObservationId(response.data.observation_id)
               setSiteId(response.data.site_id)
-              if(response.data.classification_results[0]?.error)
-                setImageAiPrediction({'class': 'undefined', 'confidence': 0})
-              else 
-                setImageAiPrediction(response.data.classification_results[0])
               setPestImages({})
               setCreateNewSiteOrObservation(false)
               localStorage.setItem('observationId', JSON.stringify(response.data.observation_id));
               localStorage.setItem('siteId', JSON.stringify(response.data.site_id));
               setRefetchImages(true)
             }
-
           }catch( exception ){
             console.log(exception.message);
           }
@@ -319,6 +341,19 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
       }
     }
   }
+
+  useEffect(() => {
+      const handleUnload = () => {
+          const storedObservationId = localStorage.getItem('observationId') || 0;
+          deleteObservation(parseInt(storedObservationId));
+      };
+  
+      window.addEventListener('unload', handleUnload);
+  
+      return () => {
+          window.removeEventListener('unload', handleUnload);
+      };
+  }, []);
 
   useEffect(() => {
     const handleBeforeUnload = (event) => {
@@ -346,6 +381,7 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
   };
   
   const [isCloseDialogOpen, setIsCloseDialogOpen] = React.useState(false);
+  const [isCloseSiteDialogOpen, setIsCloseSiteDialogOpen] = React.useState(false);
 
   const handleCloseSidebar = () => {
     if(proceedToSavingData)
@@ -366,10 +402,20 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
     deleteObservation(parseInt(storedObservationId));
     setIsCloseDialogOpen(false);
     setSidebarOpen(false);
+    setIsDisableNavigations(false)
   };
 
   const handleDialogCancel = () => {
     setIsCloseDialogOpen(false)
+  };
+
+  const handleSiteDialogCancel = () => {
+    setIsCloseSiteDialogOpen(false)
+  };
+
+  const handleSiteCloseConfirm = () => {
+    handleSave(true)
+    setIsCloseSiteDialogOpen(false)
   };
 
   
@@ -386,6 +432,17 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
         onConfirm={handleCloseConfirm}
         title="Confirm Close"
         message="You have unsaved data ,are you sure want to close?"
+      />
+
+      <ConfirmationDialogRaw
+        id="site-dialog"
+        keepMounted
+        value="SiteError"
+        open={isCloseSiteDialogOpen}
+        onClose={handleSiteDialogCancel}
+        onConfirm={handleSiteCloseConfirm}
+        title="Cannot Save Observation"
+        message="You chose create new site but the Site name you provided already exists, should the observation be saved to this site instead?"
       />
       
       <div className="flex flex-col font-raleway items-center justify-start mx-auto p-0.5 w-full"
@@ -514,42 +571,52 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
                               </>
                           )}
                           {buttonState.showManageImages && (
-                            <><Button
-                              type="button"
-                              className="!text-white-A700 cursor-pointer font-raleway min-w-[198px] text-center text-lg tracking-[0.81px]"
-                              shape="round"
-                              color="blue_gray_500"
-                              size="xs"
-                              variant="fill"
-                              // disabled upload buttons
-                              disabled={!isCheckboxChecked[props.id] ? true : false}
-                              style={{ marginTop: '10px', opacity: isCheckboxChecked[props.id]  ? 1 : 0.5 }}
-                              onClick={() => openManageImagesModal(props.id, props.name, props.sensitivity_score, pestImages[props.id])}
-                            >
-                              Manage Images
-                              {pestImages[props.id]?.length ? <div style={{ fontSize: "0.8rem" }}>({pestImages[props.id]?.length} images uploaded)</div> : null}
-                            </Button><UploadModal
-                                key={`image-${props.id}`}
-                                isOpen={openImagePestId === props.id && isAddMore}
-                                onClose={closeUploadModal}
-                                onSubmit={
-                                  
-                                  files => {
-                                    pestImages[props.id] = files;
-                                    setPestImages({ ...pestImages });
-                                    setOpenImagePestId(0);
-                                    setIsAddMore(false);
-                                    setManageImagesModalData({
-                                      'groups': props.name,
-                                      'sensetivityScore': props.sensitivity_score,
-                                      'id': props.id,
-                                      'images': pestImages[props.id]
-                                    });
+                          <>
+                              {isUploadingImage ? (
+                                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginLeft:'11px' }}>
+                                    <CircularProgress style={{ color: '#288b31' }} />
+                                </div>
+                              ) : (
+                                  <>
+                                      <Button
+                                          type="button"
+                                          className="!text-white-A700 cursor-pointer font-raleway min-w-[198px] text-center text-lg tracking-[0.81px]"
+                                          shape="round"
+                                          color="red_500"
+                                          size="xs"
+                                          variant="fill"
+                                          // disabled upload buttons
+                                          disabled={!isCheckboxChecked[props.id] ? true : false}
+                                          style={{ marginTop: '10px', opacity: isCheckboxChecked[props.id] ? 1 : 0.5 }}
+                                          onClick={() => openManageImagesModal(props.id, props.name, props.sensitivity_score, pestImages[props.id])}
+                                      >
+                                          Manage Images
+                                          {pestImages[props.id]?.length ? <div style={{ fontSize: "0.8rem" }}>({pestImages[props.id]?.length} images uploaded)</div> : null}
+                                      </Button>
+                                      <UploadModal
+                                          key={`image-${props.id}`}
+                                          isOpen={openImagePestId === props.id && isAddMore}
+                                          onClose={closeUploadModal}
+                                          onSubmit={files => {
+                                              pestImages[props.id] = files;
+                                              setPestImages({ ...pestImages });
+                                              setOpenImagePestId(0);
+                                              setIsAddMore(false);
+                                              setManageImagesModalData({
+                                                  'groups': props.name,
+                                                  'sensetivityScore': props.sensitivity_score,
+                                                  'id': props.id,
+                                                  'images': pestImages[props.id],
+                                                  'saved_group_prediction': {}
+                                              });
+                                              uploadImages(pestImages);
+                                          }}
+                                      />
+                                  </>
+                              )}
+                          </>
+                      )}
 
-                                    uploadImages(pestImages)
-
-                                  } } /></>
-                          )}
                         </React.Fragment>
                       );
                     }
@@ -596,9 +663,9 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
               variant="fill"
               onClick={handleSave}
               style={{
-                opacity: proceedToSavingData ? 1 : 0.5,
+                opacity: (proceedToSavingData && allowSaving) ? 1 : 0.5,
               }}
-              disabled={!proceedToSavingData}
+              disabled={(!proceedToSavingData && !allowSaving)}
             >
               Save
             </Button>
@@ -708,7 +775,7 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
                 
               <br />
             <Text size="txtRalewayBold18" className="text-red-500">
-              {error.message ? (
+              {errorMessage.message ? (
                  <div>
                   <Text size="txtRalewayBold18" className="text-red-500">
                     Something unexpectedly went wrong. Please try again.
@@ -745,8 +812,6 @@ const ScoreForm: React.FC<ScoreFormProps> = ({ onCancel, additionalData, setSide
           onSubmit={null}
           id={manageImagesModalData.id}
           sensivityScore={manageImagesModalData.sensetivityScore}
-          aiScore={imageAiPrediction?.confidence}
-          aiGroup={imageAiPrediction?.class}
           handleButtonClick={handleButtonClick}
           refetchImages={refetchImages}
         />

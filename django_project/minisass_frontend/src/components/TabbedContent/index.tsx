@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import './scrollbar.css'; 
 
 const TabbedContent = ({ tabsData, activeTabIndex, onTabChange }) => {
   // Sort tabsData by the date in descending order
@@ -9,16 +10,18 @@ const TabbedContent = ({ tabsData, activeTabIndex, onTabChange }) => {
   };
 
   return (
-    <div className="flex flex-col items-start justify-start " >
-      <div className="flex gap-5 w-[30vw]" style={{overflowX: 'auto'}}>
-        {sortedTabsData.map((tab, index) => (
-          <button
-            key={tab.id}
-            className={`cursor-pointer min-w-[126px] text-base text-center focus:outline-none ${activeTabIndex === index ? 'border-b-4 border-blue-900 text-blue-900' : ''}`}
-            onClick={() => handleTabChange(index)}
-          >
-            {tab.label}
-          </button>
+    <div className="flex flex-col items-start justify-start">
+      <div className="flex gap-5 w-[30vw] overflow-x-auto pt-5">
+        {sortedTabsData.length > 0 && sortedTabsData.map((tab, index) => (
+          tab.label !== 'No Images' && (
+            <button
+              key={tab.id}
+              className={`cursor-pointer min-w-[126px] text-base text-center focus:outline-none ${activeTabIndex === index ? 'border-b-4 border-blue-900 text-blue-900' : ''}`}
+              onClick={() => handleTabChange(index)}
+            >
+              {tab.label}
+            </button>
+          )
         ))}
       </div>
       <div className="w-full" style={{marginTop: '-10px'}}>

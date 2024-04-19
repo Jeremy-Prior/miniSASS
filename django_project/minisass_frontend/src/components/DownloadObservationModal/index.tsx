@@ -54,7 +54,8 @@ const DownloadObservationForm: React.FC<DownloadObservationFormProps> = ({ isOpe
   const { dispatch, state  } = useAuth();
 
   useEffect(() => {
-    setFormData({ ...formData, startDate: dayjs(dateRange[1]), endDate: dayjs(dateRange[1]) });
+    setFormData({ ...formData, startDate: dayjs(dateRange[0]), endDate: dayjs(dateRange[1]) });
+      console.log('provided date ranges ',dateRange)
   }, [dateRange]);
 
   const handleSubmit = (e: FormEvent) => {
@@ -266,12 +267,10 @@ const DownloadObservationForm: React.FC<DownloadObservationFormProps> = ({ isOpe
         <LocalizationProvider dateAdapter={AdapterDayjs}>
           <DemoContainer components={['DatePicker', 'DatePicker']}>
             <DatePicker
-              className={'start-date'}
               label="Start Date"
               format="DD-MM-YYYY"
               value={formData.startDate}
               onChange={(newValue) => setFormData({ ...formData, startDate: newValue })}
-              style={{zIndex: '0!important'}}
               minDate={dayjs(dateRange[0])}
               maxDate={dayjs(dateRange[1])}
             />

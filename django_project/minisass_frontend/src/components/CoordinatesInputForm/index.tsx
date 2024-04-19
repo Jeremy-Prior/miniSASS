@@ -45,47 +45,42 @@ export default function CoordinatesInputForm(
   }
 
   useEffect(() => {
+    // console.log('debug coordinates: ', selectedCoordinates)
     setLatitude(selectedCoordinates.latitude)
     setLongitude(selectedCoordinates.longitude)
-
   }, [selectedCoordinates]);
 
   return <div className='CoordinatesInputForm'>
     {!selectOnMap ? (
-    <RadioGroup
-      value={type}
-      onChange={(evt) => setType(evt.target.value)}
-      row
-    >
-      <FormControlLabel value="DMS" control={<Radio/>} label="DMS"/>
-      <FormControlLabel value="Degree" control={<Radio/>} label="Degree"/>
-    </RadioGroup>
-    ): (
       <RadioGroup
-      value={`Degree`}
-      onChange={(evt) => setType(evt.target.value)}
-      row
-    >
-      <FormControlLabel value="Degree" control={<Radio/>} label="Degree"/>
-    </RadioGroup>
-
+        value={type}
+        onChange={(evt) => setType(evt.target.value)}
+        row
+      >
+        <FormControlLabel value="DMS" control={<Radio/>} label="DMS"/>
+        <FormControlLabel value="Degree" control={<Radio/>} label="Degree"/>
+      </RadioGroup>
+    ):(
+      <RadioGroup
+        value={`Degree`}
+        onChange={(evt) => {
+          setType(evt.target.value);
+        }}
+        row
+      >
+        <FormControlLabel value="Degree" control={<Radio/>} label="Degree"/>
+      </RadioGroup>
     )}
     {selectOnMap ?
     (
-
       <DegreeInputs
-      latitude={values.latitude}
-      longitude={values.longitude}
-      disabled={disabled}
-      setLatitude={(value) => {
-        setFieldValue('latitude', value);
-        handleMapClick(Number(value), Number(values.longitude))
-      }}
-      setLongitude={(value) => {
-        setFieldValue('longitude', value);
-        handleMapClick(Number(values.latitude), Number(value))
-      }}
-    />) :
+        latitude={selectedCoordinates.latitude !== null ? selectedCoordinates.latitude.toFixed(6) : 0.000000}
+        longitude={selectedCoordinates.longitude !== null ? selectedCoordinates.longitude.toFixed(6) : 0.000000}
+        disabled={disabled}
+        setLatitude={setLatitude}
+        setLongitude={setLongitude}
+      />
+    ) :
       type === 'Degree' ?
         <DegreeInputs
           latitude={values.latitude}

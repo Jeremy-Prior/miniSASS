@@ -62,12 +62,25 @@ const ObservationDetails: React.FC<ObservationDetailsProps> = ({
 
   let minDate = dayjs().format('YYYY-MM-DD');
   let maxDate = dayjs().format('YYYY-MM-DD');
+  
   if (observationList.length == 1) {
     minDate = dayjs(observationList[0].obs_date).format('YYYY-MM-DD');
     maxDate = dayjs(observationList[0].obs_date).format('YYYY-MM-DD');
   } else if (observationList.length > 1) {
+    
+    // Loop through the observation list to find the minimum and maximum dates
+    minDate = dayjs(observationList[0].obs_date).format('YYYY-MM-DD');
     maxDate = dayjs(observationList[0].obs_date).format('YYYY-MM-DD');
-    minDate = dayjs(observationList[observationList.length - 1].obs_date).format('YYYY-MM-DD');
+
+    for (let i = 1; i < observationList.length; i++) {
+        const currentDate = dayjs(observationList[i].obs_date).format('YYYY-MM-DD');
+        if (dayjs(currentDate).isBefore(minDate)) {
+            minDate = currentDate;
+        }
+        if (dayjs(currentDate).isAfter(maxDate)) {
+            maxDate = currentDate;
+        }
+    }
   }
 
   const fetchObservations = async () => {
@@ -234,23 +247,14 @@ const ObservationDetails: React.FC<ObservationDetailsProps> = ({
       if (images.length === 0) {
         allImages = [{
           id: `tab-image-${observation.obs_date}-1`,
-          label: 'Empty Image',
+          label: 'No Images',
           content: (
-            <div className="flex flex-row gap-2.5 items-start justify-start overflow-auto w-[566px] sm:w-full alabasta" style={{ marginTop: '10%' }}>
-              {
-                // Render placeholder if no images are available
-                <img
-                  className="h-[152px] md:h-auto object-cover w-[164px] alabasta"
-                  src={`${globalVariables.staticPath}images_placeholder.png`}
-                  alt="No Images Available"
-                  loading='lazy'
-                />
-              }
+            <div className="flex items-center justify-center w-[566px] sm:w-full h-[152px] md:h-auto overflow-hidden">
+              <span className="text-gray-500">No Images available for site</span>
             </div>
           )
         }]
       }
-
       imagesPerDate[observation.obs_date] = allImages
     })
 
@@ -263,7 +267,7 @@ const ObservationDetails: React.FC<ObservationDetailsProps> = ({
         id: `tab${index + 1}`,
         label: observation.obs_date,
         content: (
-          <div className="flex flex-row gap-2.5 items-start justify-start overflow-auto w-[566px] sm:w-full" style={{ marginTop: '10%' }}>
+          <div className="flex flex-row gap-2.5 items-start justify-start overflow-hidden w-[566px] sm:w-full" style={{ marginTop: '10%' }}>
             <TabbedContent
               tabsData={imageTabsData[observation.obs_date] ? imageTabsData[observation.obs_date] : []}
               activeTabIndex={imageTabIndex}
@@ -331,7 +335,7 @@ const ObservationDetails: React.FC<ObservationDetailsProps> = ({
   return (
     <div className={classname}
     style={{
-        height: '75vh',
+        height: '74.5vh',
         overflowY: 'auto',
         overflowX: 'auto',
       }}
@@ -527,10 +531,11 @@ const ObservationDetails: React.FC<ObservationDetailsProps> = ({
                         size="txtRalewayRomanRegular18"
                       >
                         {observationDetails.latitude !== undefined && observationDetails.latitude !== null
-                          ? observationDetails.latitude
+                          ? Number(observationDetails.latitude).toFixed(6)
                           : (siteWithObservations.observations.length > 0
-                            ? siteWithObservations.observations[0].latitude
-                            : '0')}
+                            ? Number(siteWithObservations.observations[0].latitude).toFixed(6)
+                            : '0')
+                        }
                       </Text>
                     </div><div className="flex flex-row gap-3 items-center justify-between w-[541px] sm:w-full">
                       <Text
@@ -544,10 +549,11 @@ const ObservationDetails: React.FC<ObservationDetailsProps> = ({
                         size="txtRalewayRomanRegular18"
                       >
                         {observationDetails.longitude !== undefined && observationDetails.longitude !== null
-                          ? observationDetails.longitude
+                          ? Number(observationDetails.longitude).toFixed(6)
                           : (siteWithObservations.observations.length > 0
-                            ? siteWithObservations.observations[0].longitude
-                            : '0')}
+                            ? Number(siteWithObservations.observations[0].longitude).toFixed(6)
+                            : '0')
+                        }
                       </Text>
                     </div><div className="flex flex-row gap-3 items-center justify-between w-[541px] sm:w-full">
                       <Text
@@ -718,7 +724,7 @@ const ObservationDetails: React.FC<ObservationDetailsProps> = ({
                           className="text-gray-800_01 text-lg tracking-[0.15px] w-auto"
                           size="txtRalewayRomanRegular18"
                         >
-                          Ph:
+                          pH:
                         </Text>
                         <Text
                           className="text-gray-800_01 text-lg tracking-[0.15px] w-auto"
@@ -782,7 +788,7 @@ const ObservationDetails: React.FC<ObservationDetailsProps> = ({
                           className="text-gray-800_01 text-lg tracking-[0.15px] w-auto"
                           size="txtRalewayRomanRegular18"
                         >
-                          Electrical Conduct:
+                          Electrical Conductivity:
                         </Text>
                         <Text
                           className="text-gray-800_01 text-lg tracking-[0.15px] w-auto"
